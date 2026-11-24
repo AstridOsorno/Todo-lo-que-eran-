@@ -9,10 +9,14 @@ const visited = new Set();
 const state = { view: 'intro', story: null, ready: false, fallback: false, focusedMarker: null, touchMarker: null, dragging: false };
 let renderer, scene, camera, controls, earth, galaxy, stars, earthPoints, dust;
 let worldCamera, worldTarget, lastTime = 0, lastInteraction = 0, pointerStart;
-let cardObjects = [], markerObjects = [], ghostObjects = [];
+let cardObjects = [], markerObjects = [];
+const portraitSamples = new Map();
+const memoryButtons = new WeakMap();
+const activePointers = new Set();
+let photoPointer = null;
+let cloudRequest = 0;
 const v = new THREE.Vector3();
 const cameraDirection = new THREE.Vector3();
-const up = new THREE.Vector3(0, 1, 0);
 const radius = 2;
 const dialogs = [$('memory-dialog'), $('sources-dialog')];
 const deg = Math.PI / 180;
@@ -21,8 +25,9 @@ function globePosition(lat, lng, r = radius) {
   return new THREE.Vector3(r * Math.cos(lat * deg) * Math.sin(lng * deg), r * Math.sin(lat * deg), r * Math.cos(lat * deg) * Math.cos(lng * deg));
 }
 function fitWorldDistance() {
-  return Math.max(6.5, 2.36 / (Math.tan(21 * deg) * (innerWidth / innerHeight)));
+  return Math.max(7.3, 2.36 / (Math.tan(21 * deg) * (innerWidth / innerHeight)));
 }
+function galaxyDistance() { return innerWidth < 650 ? 7.8 : 9.5; }
 function announce(text) { $('announcement').textContent = text; }
 function setHistory(view, id = null) {
   const hash = view === 'intro' ? '' : view === 'world' ? '#mundo' : `#recuerdo-${id}`;
@@ -44,6 +49,8 @@ function setView(view, storyId = null, push = true) {
   $('galaxy').hidden = view !== 'galaxy';
   $('fallback').hidden = view !== 'world' || !state.fallback;
   hideTooltip();
+  photoPointer = null;
+  activePointers.clear();
   state.focusedMarker = null;
   state.touchMarker = null;
   if (earth) {
@@ -55,14 +62,14 @@ function setView(view, storyId = null, push = true) {
     controls.enablePan = false;
     controls.autoRotate = view === 'world' && !reducedMotion.matches;
     controls.enableDamping = !reducedMotion.matches;
-    controls.minDistance = view === 'world' ? 2.7 : 4.5;
-    controls.maxDistance = view === 'world' ? fitWorldDistance() * 1.5 : 12;
+    controls.minDistance = view === 'world' ? 2.7 : 3.2;
+    controls.maxDistance = view === 'world' ? fitWorldDistance() * 1.5 : 16;
     controls.target.set(0, 0, 0);
     if (view === 'world') {
       if (worldCamera) { camera.position.copy(worldCamera); controls.target.copy(worldTarget); }
       else camera.position.copy(globePosition(19, -68, fitWorldDistance()));
     } else if (view === 'galaxy') {
-      camera.position.set(0, 0, 7.8);
+      camera.position.set(0, 0, galaxyDistance());
     }
     camera.lookAt(controls.target);
     controls.update();
@@ -200,22 +207,42 @@ function updateMarkers() {
   else hideTooltip();
 }
 
-const desktopCardPositions = [[-2.45,1.25,-.3],[-.25,1.45,-.75],[2.05,1.1,-.35],[-1.95,-1,.6],[.3,-1.25,.3],[2.35,-1,-.65]];
+const desktopCardPositions = [[-2.4,.95,.25],[-.75,1.65,-.8],[.35,.3,1],[2.3,1,-.4],[1.15,-1.6,.1],[-1.6,-1.3,.7]];
 const mobileCardPositions = [[-.7,1.65,0],[.7,1.3,-.4],[-.68,.15,.3],[.7,-.2,-.35],[-.68,-1.35,-.1],[.7,-1.7,-.4]];
+const fragmentPositions = [[-3.8,1.65,-1.7],[-2.5,2.25,-.8],[-.3,2.4,-1.2],[1.3,2.05,.2],[3.2,1.65,-1.7],[3.6,.15,-.6],[3.1,-1.5,-1.2],[1.8,-2.15,-.8],[.4,-2.35,-1.1],[-1.1,-2,-1.4],[-3.45,-1.45,-.6],[-3.85,-.1,-1.8]];
 function layoutCardPositions() {
-  const positions = innerWidth < 650 ? mobileCardPositions : desktopCardPositions;
-  cardObjects.forEach((card, i) => card.position.fromArray(positions[i % positions.length]));
-  if (cardObjects.length === 3) {
+  const mobile = innerWidth < 650;
+  const positions = mobile ? mobileCardPositions : desktopCardPositions;
+  const primary = cardObjects.filter(card => !card.secondary);
+  primary.forEach((card, i) => card.position.fromArray(positions[i % positions.length]));
+  if (primary.length === 3) {
     const positions = innerWidth < 650 ? [[-.6,1.25,0],[.6,0,.2],[-.4,-1.25,-.2]] : [[-2,1,0],[1.7,.6,.2],[-.3,-1.2,.3]];
-    cardObjects.forEach((card,i) => card.position.fromArray(positions[i]));
+    primary.forEach((card,i) => card.position.fromArray(positions[i]));
   }
+  cardObjects.filter(card => card.secondary).forEach((card, i) => {
+    card.position.fromArray(fragmentPositions[i % fragmentPositions.length]);
+    if (mobile) card.position.multiply(new THREE.Vector3(.42, .95, 1.2));
+  });
 }
 function createMemoryCards(story) {
   $('memory-cards').replaceChildren();
-  cardObjects = story.memories.map((memory, i) => {
+  const entries = story.memories.map((memory, index) => ({ memory, index, secondary: false }));
+  const photos = story.memories.filter(memory => memory.image);
+  if (photos.length && !state.fallback) {
+    for (let i = 0; i < 12; i++) {
+      const memory = photos[(i + 2) % photos.length];
+      entries.push({ memory, index: story.memories.indexOf(memory), secondary: true });
+    }
+  }
+  cardObjects = entries.map(({ memory, index, secondary }) => {
+    const i = index;
     const button = document.createElement('button');
-    button.className = 'memory-card' + (memory.image ? '' : ' text-memory');
+    button.className = 'memory-card' + (memory.image ? '' : ' text-memory') + (secondary ? ' fragment-card' : ' primary-memory');
     button.dataset.memory = String(i);
+    if (secondary) {
+      button.tabIndex = -1;
+      button.setAttribute('aria-label', `Otro encuadre: ${memory.title}`);
+    }
     const photo = document.createElement('span'); photo.className = 'photo';
     if (memory.image && story.id === 'm1') {
       photo.classList.add('portrait-detail');
@@ -230,53 +257,38 @@ function createMemoryCards(story) {
     const caption = document.createElement('span'); caption.className = 'card-caption'; caption.textContent = memory.title;
     const kind = document.createElement('span'); kind.className = 'card-kind'; kind.textContent = memory.kind;
     button.append(photo, caption, kind);
-    button.addEventListener('click', () => openMemory(memory));
+    memoryButtons.set(button, memory);
+    button.addEventListener('click', event => {
+      if (state.fallback || event.detail === 0) openMemory(memory);
+    });
     button.addEventListener('focus', () => {
       if (camera && !state.fallback && button.style.visibility === 'hidden') {
-        camera.position.set(0, 0, 7.8); controls.target.set(0, 0, 0); controls.update();
+        camera.position.set(0, 0, galaxyDistance()); controls.target.set(0, 0, 0); controls.update();
       }
     });
     $('memory-cards').append(button);
-    return { button, position: new THREE.Vector3(), phase: i * 1.7 };
+    return { button, position: new THREE.Vector3(), secondary };
   });
   layoutCardPositions();
-  ghostObjects.forEach(object => { galaxy.remove(object); object.material.map?.dispose(); object.material.dispose(); });
-  ghostObjects = [];
-  if (galaxy && !state.fallback) {
-    const photos = story.id === 'm1' ? [] : [...new Set(story.memories.map(m => m.image).filter(Boolean))];
-    for (let i = 0; i < (photos.length ? 14 : 0); i++) {
-      const texture = new THREE.TextureLoader().load(photos[i % photos.length]);
-      texture.colorSpace = THREE.SRGBColorSpace;
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: .24, depthWrite: false, color: 0xc2a5be }));
-      const angle = i * 2.4;
-      const distance = 2.2 + (i % 5) * .52;
-      sprite.position.set(Math.cos(angle) * distance, Math.sin(angle) * distance * .65, -2 - i % 4);
-      sprite.scale.set(.32 + (i % 3) * .1, .4 + (i % 3) * .1, 1);
-      galaxy.add(sprite); ghostObjects.push(sprite);
-    }
-  }
+  if (dust && !state.fallback) colorCloud(story);
 }
 function updateCards(time) {
   const mobile = innerWidth < 650;
-  const baseDistance = 7.8;
+  const baseDistance = galaxyDistance();
   cardObjects.forEach(card => {
     v.copy(card.position);
-    if (!reducedMotion.matches) {
-      v.y += Math.sin(time * .00016 + card.phase) * .065;
-      v.x += Math.cos(time * .00012 + card.phase) * .04;
-    }
     const distance = camera.position.distanceTo(v);
     v.project(camera);
     const visible = v.z < 1 && Math.abs(v.x) < 1.35 && Math.abs(v.y) < 1.35;
     const x = (v.x * .5 + .5) * innerWidth;
     const y = (-v.y * .5 + .5) * innerHeight;
     const fit = mobile ? Math.min(innerWidth / 440, innerHeight / 900, .88) : Math.min(innerHeight / 850, 1.04);
-    const scale = Math.max(.48, Math.min(1.4, baseDistance / distance)) * fit;
+    const scale = Math.max(.3, Math.min(2.7, baseDistance / distance)) * fit * (card.secondary ? .7 : 1);
     card.button.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%) scale(${scale})`;
     card.button.style.visibility = visible ? 'visible' : 'hidden';
-    card.button.style.opacity = visible ? Math.min(1, Math.max(.35, 1.3 - distance * .045)) : 0;
-    card.button.style.zIndex = String(Math.round(100 - distance));
-    card.button.querySelector('.card-caption').style.fontSize = `${14 / scale}px`;
+    card.button.style.opacity = visible ? (card.secondary ? .65 : 1) : 0;
+    card.button.style.zIndex = String(Math.round((card.secondary ? 45 : 100) - distance));
+    card.button.querySelector('.card-caption').style.fontSize = `${(card.secondary ? 12 : 14) / scale}px`;
     card.button.querySelector('.card-kind').style.fontSize = `${12 / scale}px`;
   });
 }
@@ -335,7 +347,7 @@ async function createEarth() {
     }
   }
   const landPixels = landContext.getImageData(0, 0, canvas.width, canvas.height).data;
-  const count = innerWidth < 650 ? 70000 : 125000;
+  const count = innerWidth < 650 ? 38000 : 68000;
   const positions = new Float32Array(count * 3); const colors = new Float32Array(count * 3);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < count; i++) {
@@ -350,8 +362,8 @@ async function createEarth() {
     const red = pixels[index] / 255, green = pixels[index + 1] / 255, blue = pixels[index + 2] / 255;
     const ocean = landPixels[index + 3] < 128;
     const light = (red + green + blue) / 3;
-    if (ocean) colors.set([.09 + light * .08, .15 + light * .1, .26 + light * .17], i * 3);
-    else colors.set([.66 + light * .3, .61 + light * .34, .73 + light * .25], i * 3);
+    if (ocean) colors.set([.018, .03, .045], i * 3);
+    else colors.set([.57 + light * .32, .63 + light * .29, .68 + light * .27], i * 3);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -359,47 +371,118 @@ async function createEarth() {
   const material = new THREE.ShaderMaterial({
     vertexColors: true, transparent: true, depthWrite: false,
     uniforms: { pixelRatio: { value: Math.min(devicePixelRatio, 1.7) } },
-    vertexShader: `varying vec3 vColor; uniform float pixelRatio; void main(){vColor=color; vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=clamp(12.0/-mv.z,1.2,3.0)*pixelRatio;gl_Position=projectionMatrix*mv;}`,
-    fragmentShader: `varying vec3 vColor;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;gl_FragColor=vec4(vColor,smoothstep(.5,.22,d)*.95);}`
+    vertexShader: `varying vec3 vColor;varying float alpha;uniform float pixelRatio;void main(){vColor=color;vec4 mv=modelViewMatrix*vec4(position,1.);float facing=dot(normalize(normalMatrix*normalize(position)),normalize(-mv.xyz));alpha=mix(.10,.86,smoothstep(-.15,.55,facing));gl_PointSize=clamp(8.8/-mv.z,.85,2.5)*pixelRatio;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `varying vec3 vColor;varying float alpha;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;gl_FragColor=vec4(vColor,smoothstep(.5,.22,d)*alpha);}`
   });
   earthPoints = new THREE.Points(geometry, material);
   earth.add(earthPoints);
-  earth.add(new THREE.Mesh(new THREE.SphereGeometry(1.994, 64, 48), new THREE.MeshBasicMaterial({ color: 0x020205 })));
-  const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(2.035, 64, 48), new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending,
-    vertexShader: `varying vec3 n;varying vec3 p;void main(){n=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1.);p=-mv.xyz;gl_Position=projectionMatrix*mv;}`,
-    fragmentShader: `varying vec3 n;varying vec3 p;void main(){float f=pow(1.-abs(dot(normalize(n),normalize(p))),4.);gl_FragColor=vec4(.24,.20,.40,f*.25);}`
-  }));
-  earth.add(atmosphere);
+  const lineMaterial = (color, opacity) => new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { tint: { value: new THREE.Color(color) }, opacity: { value: opacity } },
+    vertexShader: `varying float alpha;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);float facing=dot(normalize(normalMatrix*normalize(position)),normalize(-mv.xyz));alpha=mix(.11,1.,smoothstep(-.18,.6,facing));gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `varying float alpha;uniform vec3 tint;uniform float opacity;void main(){gl_FragColor=vec4(tint,alpha*opacity);}`
+  });
+  const boundaries = [];
+  for (const feature of landData.features) {
+    const polygons = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+    for (const polygon of polygons) for (const ring of polygon) {
+      for (let i = 1; i < ring.length; i++) {
+        const [lngA, latA] = ring[i - 1], [lngB, latB] = ring[i];
+        if (Math.abs(lngB - lngA) > 180) continue;
+        const start = globePosition(latA, lngA, 2.007), end = globePosition(latB, lngB, 2.007);
+        const steps = Math.max(1, Math.ceil(start.angleTo(end) / .025));
+        let last = start;
+        for (let step = 1; step <= steps; step++) {
+          const next = start.clone().lerp(end, step / steps).normalize().multiplyScalar(2.007);
+          boundaries.push(...last.toArray(), ...next.toArray()); last = next;
+        }
+      }
+    }
+  }
+  const boundaryGeometry = new THREE.BufferGeometry();
+  boundaryGeometry.setAttribute('position', new THREE.Float32BufferAttribute(boundaries, 3));
+  const countries = new THREE.LineSegments(boundaryGeometry, lineMaterial('#a1c9de', .74));
+  countries.name = 'country-outlines'; earth.add(countries);
+  const geodesic = new THREE.IcosahedronGeometry(2.022, 3);
+  const lattice = new THREE.LineSegments(new THREE.WireframeGeometry(geodesic), lineMaterial('#b8c1c7', .24));
+  geodesic.dispose(); lattice.name = 'geodesic-lattice'; earth.add(lattice);
 }
 function createGalaxy() {
-  const count = innerWidth < 650 ? 18000 : 38000;
+  const count = innerWidth < 650 ? 36000 : 78000;
   const positions = new Float32Array(count * 3); const colors = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
   let seed = 1024;
   const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-  const palette = [new THREE.Color('#e1bacf'), new THREE.Color('#b3b9db'), new THREE.Color('#a8bfc0'), new THREE.Color('#d9caab'), new THREE.Color('#6e6c9e')];
+  const gaussian = () => (random() + random() + random() + random() - 2) * 1.1;
+  const centers = [[-3.4,.25,-.8],[-2,1.25,.4],[-.2,1.1,-.75],[2.25,1,.7],[3,-.9,-.85],[.8,-1.6,.6],[-1.8,-.9,1.15]];
+  const palette = [[.88,.88,.84],[.46,.63,.76],[.73,.59,.49],[.61,.65,.43],[.72,.74,.8]];
   for (let i = 0; i < count; i++) {
-    const r = Math.pow(random(), .65) * 5;
-    const angle = r * 1.65 + Math.floor(random() * 3) * Math.PI * 2 / 3 + (random() - .5) * .7;
-    const spread = .16 + r * .035;
-    const x = Math.cos(angle) * r + (random() - .5) * spread;
-    const z = Math.sin(angle) * r * .45 + (random() - .5) * spread;
-    const y = Math.sin(angle * 1.7) * .4 + (random() - .5) * (1 + r * .12);
+    const center = centers[i % centers.length];
+    const x = center[0] + gaussian() * .95;
+    const y = center[1] + gaussian() * .72 + Math.sin(x * 1.7) * .18;
+    const z = center[2] + Math.sin(x * .9 + y * 1.8) * .62 + gaussian() * .56;
     positions.set([x, y, z], i * 3);
-    const color = palette[Math.floor(random() * palette.length)].clone().multiplyScalar(.35 + random() * .6);
-    colors.set([color.r, color.g, color.b], i * 3);
+    const color = palette[Math.floor(random() * palette.length)];
+    const brightness = .5 + random() * .5;
+    colors.set(color.map(channel => channel * brightness), i * 3);
+    sizes[i] = 1.45 + random() * 2.35;
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  dust = new THREE.Points(geometry, new THREE.PointsMaterial({ size: .012, vertexColors: true, transparent: true, opacity: .7, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
-  dust.rotation.x = .65;
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  dust = new THREE.Points(geometry, new THREE.ShaderMaterial({
+    vertexColors: true, transparent: true, depthWrite: false,
+    uniforms: { pixelRatio: { value: Math.min(devicePixelRatio, 1.7) } },
+    vertexShader: `attribute float size;varying vec3 vColor;varying float alpha;uniform float pixelRatio;void main(){vColor=color;vec4 mv=modelViewMatrix*vec4(position,1.);alpha=clamp(1.2+mv.z*.045,.25,.9);gl_PointSize=clamp(size*8.8/-mv.z,.65,9.)*pixelRatio;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `varying vec3 vColor;varying float alpha;void main(){vec2 p=abs(gl_PointCoord-.5);float edge=1.-smoothstep(.36,.5,max(p.x,p.y));float cross=1.-smoothstep(.12,.26,min(p.x,p.y));gl_FragColor=vec4(vColor,edge*mix(.55,1.,cross)*alpha);}`
+  }));
+  dust.name = 'memory-point-cloud';
   galaxy.add(dust);
   const fieldPositions = new Float32Array(2200 * 3);
   for (let i = 0; i < 2200; i++) fieldPositions.set([(random() - .5) * 55, (random() - .5) * 40, (random() - .5) * 40], i * 3);
   const fieldGeometry = new THREE.BufferGeometry(); fieldGeometry.setAttribute('position', new THREE.BufferAttribute(fieldPositions, 3));
   stars = new THREE.Points(fieldGeometry, new THREE.PointsMaterial({ color: 0x9b90ad, size: .012, transparent: true, opacity: .5, depthWrite: false }));
   scene.add(stars);
+}
+async function samplePortrait(path, storyId) {
+  if (!portraitSamples.has(path)) portraitSamples.set(path, new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (storyId === 'm1') context.drawImage(image, 260, 65, 260, 300, 0, 0, 128, 128);
+      else context.drawImage(image, 0, 0, 128, 128);
+      resolve(context.getImageData(0, 0, 128, 128).data);
+    };
+    image.onerror = reject; image.src = path;
+  }));
+  return portraitSamples.get(path);
+}
+async function colorCloud(story) {
+  const request = ++cloudRequest;
+  const paths = [...new Set(story.memories.map(memory => memory.image).filter(Boolean))];
+  const samples = await Promise.allSettled(paths.map(path => samplePortrait(path, story.id)));
+  if (request !== cloudRequest || state.story?.id !== story.id) return;
+  const images = samples.filter(result => result.status === 'fulfilled').map(result => result.value);
+  const color = dust.geometry.getAttribute('color');
+  let seed = story.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 15);
+  const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let i = 0; i < color.count; i++) {
+    if (!images.length || random() < .25) {
+      const light = .48 + random() * .5;
+      color.setXYZ(i, light * .94, light * .97, light);
+      continue;
+    }
+    const image = images[i % images.length];
+    const pixel = Math.floor(random() * image.length / 4) * 4;
+    const channels = [image[pixel], image[pixel + 1], image[pixel + 2]].map(channel => channel / 255);
+    const max = Math.max(...channels, .1);
+    const brightness = .45 + random() * .45;
+    color.setXYZ(i, channels[0] / max * brightness, channels[1] / max * brightness, channels[2] / max * brightness);
+  }
+  color.needsUpdate = true;
+  dust.rotation.set(0, (seed % 13 - 6) * .012, .025);
 }
 function activateFallback(error) {
   state.fallback = true;
@@ -422,7 +505,7 @@ async function initialize() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, .1, 100);
     camera.position.copy(globePosition(19, -68, fitWorldDistance()));
-    controls = new OrbitControls(camera, renderer.domElement);
+    controls = new OrbitControls(camera, $('experience'));
     controls.enableDamping = !reducedMotion.matches;
     controls.dampingFactor = .06;
     controls.rotateSpeed = .5;
@@ -462,13 +545,40 @@ function render(time) {
   if (!modalOpen) controls.update(delta);
   if (state.view === 'world') updateMarkers();
   if (state.view === 'galaxy') {
-    if (!reducedMotion.matches && !modalOpen) dust.rotation.z = time * .000012;
+    if (!reducedMotion.matches && !modalOpen) dust.rotation.y += delta * .012;
     updateCards(time);
   }
   renderer.render(scene, camera);
 }
 
 const ready = initialize();
+$('experience').addEventListener('pointerdown', event => {
+  if (state.view !== 'galaxy' || state.fallback) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  activePointers.add(event.pointerId);
+  if (activePointers.size > 1 && photoPointer) photoPointer.multitouch = true;
+  const button = event.target.closest('.memory-card');
+  if (button && activePointers.size === 1) {
+    photoPointer = { id: event.pointerId, x: event.clientX, y: event.clientY, button, multitouch: false };
+    button.focus({ preventScroll: true });
+  }
+}, true);
+$('experience').addEventListener('pointerup', event => {
+  activePointers.delete(event.pointerId);
+  if (!photoPointer || photoPointer.id !== event.pointerId) return;
+  const pointer = photoPointer; photoPointer = null;
+  const memory = memoryButtons.get(pointer.button);
+  if (state.view === 'galaxy' && !pointer.multitouch && memory && Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) < 8) {
+    queueMicrotask(() => openMemory(memory));
+  }
+}, true);
+$('experience').addEventListener('pointercancel', event => {
+  activePointers.delete(event.pointerId);
+  if (photoPointer?.id === event.pointerId) photoPointer = null;
+}, true);
+document.querySelectorAll('.galaxy-nav button').forEach(button => {
+  button.addEventListener('pointerdown', event => event.stopPropagation());
+});
 $('enter').addEventListener('click', async () => {
   $('enter').disabled = true;
   $('enter').setAttribute('aria-busy', 'true');
@@ -517,8 +627,9 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(Math.min(devicePixelRatio, innerWidth < 650 ? 1.5 : 1.8));
+  const oldFit = Math.max(7.3, 2.36 / (Math.tan(21 * deg) * oldAspect));
+  if (worldCamera) worldCamera.multiplyScalar(fitWorldDistance() / oldFit);
   if (state.view === 'world' || state.view === 'intro') {
-    const oldFit = Math.max(6.5, 2.36 / (Math.tan(21 * deg) * oldAspect));
     camera.position.multiplyScalar(fitWorldDistance() / oldFit);
     controls.maxDistance = fitWorldDistance() * 1.5;
   }

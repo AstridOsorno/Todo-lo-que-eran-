@@ -21,6 +21,23 @@ for (const id of ['m1', 'm2', 'm3', 'c1', 'e1', 'e2', 'a1']) {
   await marker.focus(); await page.waitForTimeout(150); await marker.click();
   await page.waitForFunction(() => document.body.dataset.view === 'galaxy');
   assert((await page.locator('.memory-card').count()) >= 3);
+  if (id === 'm1') {
+    const card = page.locator('.primary-memory').first();
+    const beforeZoom = await card.getAttribute('style');
+    let bounds = await card.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.wheel(0, -600);
+    await page.waitForTimeout(120);
+    assert.notEqual(await card.getAttribute('style'), beforeZoom, 'Acercarse sobre una foto');
+    bounds = await card.boundingBox();
+    const x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2;
+    const beforeTurn = await card.getAttribute('style');
+    await page.mouse.move(x, y); await page.mouse.down();
+    await page.mouse.move(x + 85, y + 10, { steps: 8 }); await page.mouse.up();
+    await page.waitForTimeout(100);
+    assert.notEqual(await card.getAttribute('style'), beforeTurn, 'Girar desde una foto');
+    assert.equal(await page.locator('#memory-dialog').isVisible(), false, 'Arrastrar conserva la nube abierta');
+  }
   await page.locator('.memory-card').first().click();
   await page.locator('#memory-dialog').waitFor({ state: 'visible' });
   const text = await page.locator('#memory-title').innerText();

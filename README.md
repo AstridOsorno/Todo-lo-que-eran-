@@ -2,6 +2,8 @@
 
 Obra interactiva escolar de Astrid Osorno. Una entrada en negro abre un mundo de partículas: cada punto conduce a una constelación de fotografías y recuerdos de una vida. El recorrido no muestra los nombres de las mujeres y niñas; recuerda sus gustos, estudios, vínculos y proyectos.
 
+El mundo combina contornos de países, una malla geodésica y partículas translúcidas. Las constelaciones son nubes irregulares con profundidad; sus colores se toman de los retratos documentados de cada historia. Las fotografías y sus encuadres se distribuyen en distintos planos y crecen al acercarse. La rueda y el arrastre funcionan también cuando el cursor está encima de una fotografía.
+
 Sitio público: https://astridosorno.github.io/Todo-lo-que-eran-/
 
 ## Recorrer la obra
