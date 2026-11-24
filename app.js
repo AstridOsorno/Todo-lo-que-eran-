@@ -163,13 +163,36 @@ function updateMarkers() {
     const spread = 1;
     marker.x = x + offset[0] * spread;
     marker.y = y + offset[1] * spread;
+    marker.anchorX = x; marker.anchorY = y;
     marker.showing = visible && Math.abs(v.x) < 1.12 && Math.abs(v.y) < 1.12;
+  });
+  // Mantener blancos táctiles separados cuando varias localidades quedan próximas.
+  for (let pass = 0; pass < 8; pass++) {
+    for (let i = 0; i < markerObjects.length; i++) {
+      for (let j = i + 1; j < markerObjects.length; j++) {
+        const a = markerObjects[i], b = markerObjects[j];
+        if (!a.showing || !b.showing) continue;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance >= 49) continue;
+        const push = (49 - distance) / 2;
+        const nx = distance > .01 ? dx / distance : 1;
+        const ny = distance > .01 ? dy / distance : 0;
+        a.x -= nx * push; a.y -= ny * push;
+        b.x += nx * push; b.y += ny * push;
+      }
+    }
+  }
+  markerObjects.forEach(marker => {
+    marker.x = Math.max(23, Math.min(innerWidth - 23, marker.x));
+    marker.y = Math.max(23, Math.min(innerHeight - 23, marker.y));
     marker.button.style.opacity = marker.showing ? 1 : 0;
     marker.button.style.pointerEvents = marker.showing ? 'auto' : 'none';
     // Permanecen en el orden de Tab: enfocar un punto oculto gira el mundo hacia él.
     marker.button.style.transform = `translate(${marker.x - 22}px,${marker.y - 22}px)`;
-    marker.line.style.display = marker.showing && marker.story.offset ? '' : 'none';
-    marker.line.setAttribute('x1', x); marker.line.setAttribute('y1', y);
+    const displaced = Math.hypot(marker.x - marker.anchorX, marker.y - marker.anchorY) > 3;
+    marker.line.style.display = marker.showing && displaced ? '' : 'none';
+    marker.line.setAttribute('x1', marker.anchorX); marker.line.setAttribute('y1', marker.anchorY);
     marker.line.setAttribute('x2', marker.x); marker.line.setAttribute('y2', marker.y);
   });
   const active = state.touchMarker || state.focusedMarker;

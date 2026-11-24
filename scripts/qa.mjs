@@ -25,7 +25,10 @@ for (const id of ['m1', 'm2', 'm3', 'c1', 'e1', 'e2', 'a1']) {
   await page.locator('#memory-dialog').waitFor({ state: 'visible' });
   const text = await page.locator('#memory-title').innerText();
   assert(!/Fátima|Liliana|Lesvy|Yuliana|Claudia|Giulia|Özgecan/i.test(text));
-  if (id !== 'e1') assert(await page.locator('#memory-image').evaluate(image => image.complete && image.naturalWidth > 0));
+  if (id !== 'e1') await page.waitForFunction(() => {
+    const image = document.getElementById('memory-image');
+    return image.complete && image.naturalWidth > 0;
+  });
   if (id === 'm1') await page.screenshot({ path: 'research/screenshots/photo-desktop.png' });
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#memory-dialog').isVisible(), false);
