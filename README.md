@@ -2,7 +2,7 @@
 
 Obra interactiva escolar de Astrid Osorno. Una entrada en negro abre un mundo de partículas: cada punto conduce a una constelación de fotografías y recuerdos de una vida. El recorrido no muestra los nombres de las mujeres y niñas; recuerda sus gustos, estudios, vínculos y proyectos.
 
-El mundo combina contornos de países, una malla geodésica y partículas translúcidas. Las constelaciones son nubes irregulares con profundidad; sus colores se toman de los retratos documentados de cada historia. Las fotografías y sus encuadres se distribuyen en distintos planos y crecen al acercarse. La rueda y el arrastre funcionan también cuando el cursor está encima de una fotografía.
+El mundo combina contornos de países, una malla geodésica y partículas translúcidas. Las diez constelaciones son nubes irregulares con profundidad; sus colores se toman de los retratos documentados de cada historia. Las fotografías se distribuyen en distintos planos y crecen al acercarse. La rueda y el arrastre funcionan también cuando el cursor está encima de una fotografía.
 
 Sitio público: https://astridosorno.github.io/Todo-lo-que-eran-/
 
@@ -32,7 +32,11 @@ La vista local abre en http://127.0.0.1:4173. GitHub Actions compila y publica `
 
 Las coordenadas representan localidades aproximadas, nunca domicilios particulares. Los tres puntos de Ciudad de México se separan en pantalla con líneas que conservan su anclaje geográfico.
 
-La constelación de Totana tiene documentación biográfica limitada y aún no cuenta con un retrato verificado. Emplea formas simbólicas claramente indicadas en sus fuentes; no se sustituyó su imagen con la de otra persona. Algunas fotos se usan varias veces con encuadres diferentes. No se generaron rostros con inteligencia artificial ni se inventaron sueños, premios o medallas.
+La historia de España se sitúa en El Campillo y reúne la trayectoria de una profesora y artista, documentada en su archivo oficial. Se incorporaron tres historias: una estudiante de cine y música en Ciudad del Cabo, una artista en Islamabad y una corredora con medallas mundiales en Iten. Los resultados deportivos se presentan con sus fechas históricas.
+
+Cada toma aparece una sola vez en su constelación. El archivo incluye retratos diferentes, fotografías familiares y una caligrafía de la artista de Islamabad, identificada como obra suya. Un collage de Bogotá contiene dos fotografías distintas, mostradas por separado. Los recuerdos que no tienen otra fotografía verificada se presentan como textos. No se generaron rostros con inteligencia artificial ni se inventaron sueños, premios o medallas.
+
+Cada imagen tiene un identificador de toma, una procedencia enlazada y un crédito. Los encuadres de algunos archivos se definen mediante SVG en la interfaz, conservando el archivo original: permiten separar las fotografías de un collage o mostrar un retrato sin textos identificativos. Las comprobaciones de contenido detectan identificadores repetidos y etiquetas con nombres; la revisión visual comprueba las personas, las tomas y los textos dentro de las imágenes.
 
 Los dos casos inicialmente propuestos de Kenia e India fueron sustituidos, a petición de la autora del proyecto, por casos documentados de Italia y Turquía.
 

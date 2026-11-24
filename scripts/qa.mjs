@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import { stories } from '../content.js';
 const browser = await chromium.launch({ headless: true, channel: 'msedge' });
 await mkdir('research/screenshots', { recursive: true });
 const errors = [];
@@ -13,14 +14,18 @@ await page.locator('#enter').click();
 await page.waitForFunction(() => document.body.dataset.view === 'world');
 await page.waitForTimeout(300);
 await page.screenshot({ path: 'research/screenshots/world-desktop.png' });
-assert.equal(await page.locator('.marker').count(), 7);
+assert.equal(await page.locator('.marker').count(), stories.length);
 await page.locator('[data-story=m1]').hover();
 assert.match(await page.locator('#place-tooltip').innerText(), /Xochimilco/);
-for (const id of ['m1', 'm2', 'm3', 'c1', 'e1', 'e2', 'a1']) {
+for (const story of stories) {
+  const id = story.id;
   const marker = page.locator(`[data-story=${id}]`);
   await marker.focus(); await page.waitForTimeout(150); await marker.click();
   await page.waitForFunction(() => document.body.dataset.view === 'galaxy');
   assert((await page.locator('.memory-card').count()) >= 3);
+  const photoIds = await page.locator('[data-photo]').evaluateAll(cards => cards.map(card => card.dataset.photo));
+  assert.equal(new Set(photoIds).size, photoIds.length, id + ': fotos sin repetir en pantalla');
+  assert.equal(photoIds.length, story.memories.filter(m => m.image).length, id + ': todas las fotos presentes');
   if (id === 'm1') {
     const card = page.locator('.primary-memory').first();
     const beforeZoom = await card.getAttribute('style');
@@ -41,14 +46,23 @@ for (const id of ['m1', 'm2', 'm3', 'c1', 'e1', 'e2', 'a1']) {
   await page.locator('.memory-card').first().click();
   await page.locator('#memory-dialog').waitFor({ state: 'visible' });
   const text = await page.locator('#memory-title').innerText();
-  assert(!/Fátima|Liliana|Lesvy|Yuliana|Claudia|Giulia|Özgecan/i.test(text));
-  if (id !== 'e1') await page.waitForFunction(() => {
+  assert(!/Fátima|Liliana|Lesvy|Yuliana|Claudia|Giulia|Özgecan|Laura|Uyinene|Noor|Agnes/i.test(text));
+  await page.waitForFunction(() => {
     const image = document.getElementById('memory-image');
     return image.complete && image.naturalWidth > 0;
   });
+  assert.equal(await page.locator('#photo-source').getAttribute('href'), story.memories[0].imageSource);
   if (id === 'm1') await page.screenshot({ path: 'research/screenshots/photo-desktop.png' });
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#memory-dialog').isVisible(), false);
+  const textCard = page.locator('.text-memory').first();
+  if (await textCard.count()) {
+    await textCard.click();
+    await page.locator('#memory-dialog').waitFor({state:'visible'});
+    assert.equal(await page.locator('.memory-image-wrap').isVisible(), false, 'Recuerdo de texto sin repetir un retrato');
+    assert.equal(await page.locator('#photo-source').isVisible(), false);
+    await page.keyboard.press('Escape');
+  }
   await page.locator('#open-sources').click();
   assert((await page.locator('#source-list a').count()) > 0);
   await page.keyboard.press('Escape');
@@ -83,6 +97,18 @@ await phone.screenshot({ path: 'research/screenshots/photo-mobile.png' });
 await phone.locator('#memory-dialog .close-dialog').tap();
 await phone.locator('#back-world').tap();
 await phone.waitForFunction(() => document.body.dataset.view === 'world');
+for (const id of ['e1','f1','a2','f2']) {
+  const marker = phone.locator(`[data-story=${id}]`);
+  await marker.focus(); await phone.waitForTimeout(120);
+  await marker.tap(); await marker.tap();
+  await phone.waitForFunction(() => document.body.dataset.view === 'galaxy');
+  assert.equal(await phone.locator('#galaxy-place').innerText(), stories.find(s=>s.id===id).place);
+  await phone.locator('[data-photo]').first().tap();
+  await phone.locator('#memory-dialog').waitFor({state:'visible'});
+  await phone.locator('#memory-dialog .close-dialog').tap();
+  await phone.locator('#back-world').tap();
+  await phone.waitForFunction(() => document.body.dataset.view === 'world');
+}
 const noWebgl = await browser.newContext();
 await noWebgl.addInitScript(() => {
   const getContext = HTMLCanvasElement.prototype.getContext;
@@ -92,10 +118,10 @@ const fallback = await noWebgl.newPage();
 await fallback.goto('http://127.0.0.1:4173');
 await fallback.locator('#enter').click();
 await fallback.locator('#fallback').waitFor({ state: 'visible' });
-assert.equal(await fallback.locator('#fallback-places button').count(), 7);
+assert.equal(await fallback.locator('#fallback-places button').count(), stories.length);
 await fallback.locator('#fallback-places button').first().click();
 await fallback.locator('.memory-card').first().click();
 await fallback.locator('#memory-dialog').waitFor({ state: 'visible' });
 await browser.close();
 assert.deepEqual(errors, [], 'Sin errores de consola ni archivos ausentes');
-console.log('QA completada: siete galerías, fotos, fuentes, regreso, historial, tacto en móvil, ausencia de desbordamiento y recorrido sin WebGL.');
+console.log('QA completada: diez galerías, fotos sin duplicados, fuentes, regreso, historial, tacto en móvil, ausencia de desbordamiento y recorrido sin WebGL.');

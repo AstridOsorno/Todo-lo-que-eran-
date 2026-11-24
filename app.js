@@ -227,30 +227,18 @@ function layoutCardPositions() {
 function createMemoryCards(story) {
   $('memory-cards').replaceChildren();
   const entries = story.memories.map((memory, index) => ({ memory, index, secondary: false }));
-  const photos = story.memories.filter(memory => memory.image);
-  if (photos.length && !state.fallback) {
-    for (let i = 0; i < 12; i++) {
-      const memory = photos[(i + 2) % photos.length];
-      entries.push({ memory, index: story.memories.indexOf(memory), secondary: true });
-    }
-  }
   cardObjects = entries.map(({ memory, index, secondary }) => {
     const i = index;
     const button = document.createElement('button');
     button.className = 'memory-card' + (memory.image ? '' : ' text-memory') + (secondary ? ' fragment-card' : ' primary-memory');
     button.dataset.memory = String(i);
-    if (secondary) {
-      button.tabIndex = -1;
-      button.setAttribute('aria-label', `Otro encuadre: ${memory.title}`);
-    }
+    if (memory.image) button.dataset.photo = memory.photoId;
     const photo = document.createElement('span'); photo.className = 'photo';
-    if (memory.image && story.id === 'm1') {
-      photo.classList.add('portrait-detail');
-      photo.style.backgroundImage = `url('${memory.image}')`;
-      photo.setAttribute('role', 'img'); photo.setAttribute('aria-label', 'Retrato del archivo familiar');
+    if (memory.image && memory.crop) {
+      photo.append(croppedPhoto(memory));
     } else if (memory.image) {
       const img = document.createElement('img'); img.src = memory.image; img.alt = ''; img.draggable = false;
-      img.style.objectPosition = story.id === 'm2' ? (i % 2 ? '50% 100%' : '50% 0%') : memory.position; img.decoding = 'async';
+      img.style.objectPosition = memory.position; img.decoding = 'async';
       img.addEventListener('error', () => { img.remove(); button.classList.add('text-memory'); photo.innerHTML = '<span class="symbol" aria-hidden="true"></span>'; });
       photo.append(img);
     } else photo.innerHTML = '<span class="symbol" aria-hidden="true"></span>';
@@ -271,6 +259,27 @@ function createMemoryCards(story) {
   });
   layoutCardPositions();
   if (dust && !state.fallback) colorCloud(story);
+}
+let cropSequence = 0;
+function croppedPhoto(memory, enlarged = false) {
+  const [x, y, width, height, imageWidth, imageHeight] = !enlarged && memory.cardCrop ? memory.cardCrop : memory.crop;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `${x} ${y} ${width} ${height}`);
+  svg.setAttribute('preserveAspectRatio', enlarged || memory.cardCrop ? 'xMidYMid meet' : 'xMidYMid slice');
+  svg.classList.add('archive-crop');
+  if (enlarged) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', memory.imageAlt); }
+  else svg.setAttribute('aria-hidden', 'true');
+  const image = document.createElementNS(ns, 'image');
+  image.setAttribute('href', memory.image); image.setAttribute('width', imageWidth); image.setAttribute('height', imageHeight);
+  const clip = document.createElementNS(ns, 'clipPath'); clip.id = `archive-crop-${++cropSequence}`;
+  const rect = document.createElementNS(ns, 'rect');
+  for (const [key, value] of Object.entries({ x, y, width, height })) rect.setAttribute(key, value);
+  clip.append(rect);
+  image.setAttribute('clip-path', `url(#${clip.id})`);
+  const defs = document.createElementNS(ns, 'defs'); defs.append(clip);
+  svg.append(defs, image);
+  return svg;
 }
 function updateCards(time) {
   const mobile = innerWidth < 650;
@@ -295,17 +304,21 @@ function updateCards(time) {
 function openMemory(memory) {
   const img = $('memory-image');
   const wrap = img.parentElement;
-  const cropped = state.story.id === 'm1';
-  wrap.classList.toggle('portrait-detail', cropped);
-  wrap.style.backgroundImage = cropped ? `url('${memory.image}')` : '';
+  const cropped = Boolean(memory.image && memory.crop);
+  wrap.querySelector('.archive-crop')?.remove();
+  wrap.classList.toggle('cropped-image', cropped);
+  wrap.classList.toggle('without-photo', !memory.image);
   img.hidden = !memory.image || cropped;
-  if (memory.image) { img.src = memory.image; img.alt = 'Fotografía del archivo de esta vida'; }
+  if (memory.image) { img.src = memory.image; img.alt = memory.imageAlt; }
   else { img.removeAttribute('src'); img.alt = ''; }
+  if (cropped) wrap.append(croppedPhoto(memory, true));
   $('memory-title').textContent = memory.title;
   $('memory-kind').textContent = memory.kind;
   $('memory-description').textContent = memory.description;
   $('memory-source').href = memory.source;
-  $('memory-credit').textContent = memory.image ? state.story.credit : 'Forma simbólica. No representa un retrato.';
+  $('memory-credit').textContent = memory.image ? (memory.imageCredit || state.story.credit) : '';
+  $('photo-source').hidden = !memory.image;
+  if (memory.image) $('photo-source').href = memory.imageSource;
   $('memory-dialog').showModal();
 }
 function openSources() {
@@ -445,24 +458,25 @@ function createGalaxy() {
   stars = new THREE.Points(fieldGeometry, new THREE.PointsMaterial({ color: 0x9b90ad, size: .012, transparent: true, opacity: .5, depthWrite: false }));
   scene.add(stars);
 }
-async function samplePortrait(path, storyId) {
-  if (!portraitSamples.has(path)) portraitSamples.set(path, new Promise((resolve, reject) => {
+async function samplePortrait(memory) {
+  const key = memory.photoId;
+  if (!portraitSamples.has(key)) portraitSamples.set(key, new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
       const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
       const context = canvas.getContext('2d', { willReadFrequently: true });
-      if (storyId === 'm1') context.drawImage(image, 260, 65, 260, 300, 0, 0, 128, 128);
+      if (memory.crop) context.drawImage(image, ...memory.crop.slice(0, 4), 0, 0, 128, 128);
       else context.drawImage(image, 0, 0, 128, 128);
       resolve(context.getImageData(0, 0, 128, 128).data);
     };
-    image.onerror = reject; image.src = path;
+    image.onerror = reject; image.src = memory.image;
   }));
-  return portraitSamples.get(path);
+  return portraitSamples.get(key);
 }
 async function colorCloud(story) {
   const request = ++cloudRequest;
-  const paths = [...new Set(story.memories.map(memory => memory.image).filter(Boolean))];
-  const samples = await Promise.allSettled(paths.map(path => samplePortrait(path, story.id)));
+  const photos = story.memories.filter(memory => memory.image);
+  const samples = await Promise.allSettled(photos.map(memory => samplePortrait(memory)));
   if (request !== cloudRequest || state.story?.id !== story.id) return;
   const images = samples.filter(result => result.status === 'fulfilled').map(result => result.value);
   const color = dust.geometry.getAttribute('color');
