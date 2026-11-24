@@ -206,7 +206,7 @@ function layoutCardPositions() {
   const positions = innerWidth < 650 ? mobileCardPositions : desktopCardPositions;
   cardObjects.forEach((card, i) => card.position.fromArray(positions[i % positions.length]));
   if (cardObjects.length === 3) {
-    const positions = innerWidth < 650 ? [[-.6,1.5,0],[.6,0,.2],[-.4,-1.5,-.2]] : [[-2,1,0],[1.7,.6,.2],[-.3,-1.2,.3]];
+    const positions = innerWidth < 650 ? [[-.6,1.25,0],[.6,0,.2],[-.4,-1.25,-.2]] : [[-2,1,0],[1.7,.6,.2],[-.3,-1.2,.3]];
     cardObjects.forEach((card,i) => card.position.fromArray(positions[i]));
   }
 }
