@@ -1,0 +1,14 @@
+{
+  "name": "todo-lo-que-eran",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "check": "node --check app.js && node --check content.js && node --check scripts/build.mjs",
+    "test": "node scripts/check.mjs"
+  },
+  "dependencies": { "three": "0.170.0" },
+  "devDependencies": { "playwright": "1.56.1" }
+}

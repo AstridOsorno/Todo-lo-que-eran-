@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="Una obra interactiva sobre las vidas, los sueños y los recuerdos de mujeres y niñas. Un mundo de memorias para recorrer con cuidado.">
+  <title>Todo lo que eran</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/font-1.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head>
+<body data-view="intro">
+  <main id="experience">
+    <div id="universe" aria-hidden="true"></div>
+    <section id="intro" aria-labelledby="work-title">
+      <div class="intro-inner">
+        <h1 id="work-title"><button id="enter" aria-label="Todo lo que eran. Entrar al mundo"><span>Todo lo que</span><em>eran</em></button></h1>
+        <blockquote>
+          <p>“Somos ellas en el pasado, y somos ellas en el futuro, y somos otras a la vez. Somos otras y somos las mismas de siempre. Mujeres en busca de justicia. Mujeres exhaustas, y juntas”</p>
+          <cite><span>El invencible verano de Liliana</span> (2021)<br>Cristina Rivera Garza</cite>
+        </blockquote>
+      </div>
+    </section>
+    <section id="world" aria-label="Mundo de memorias" hidden>
+      <p class="sr-only" id="world-instructions">Arrastra para girar el mundo y usa la rueda o dos dedos para acercarlo. Con el teclado, usa las flechas para girar y Tab para recorrer los lugares. Selecciona un punto para entrar en sus recuerdos.</p>
+      <div id="markers" aria-describedby="world-instructions"></div>
+      <svg id="marker-lines" aria-hidden="true"></svg>
+      <div id="place-tooltip" role="status" hidden></div>
+    </section>
+    <section id="galaxy" aria-label="Constelación de recuerdos" hidden>
+      <nav class="galaxy-nav" aria-label="Navegación de recuerdos">
+        <button class="text-button" id="back-world"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="3.5" ry="8.5"/><path d="M3.5 12h17"/></svg>Volver al mundo</button>
+        <button class="icon-button" id="open-sources" aria-label="Sobre estos recuerdos y sus fuentes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 10v7M12 6.5v.5"/></svg></button>
+      </nav>
+      <div id="memory-cards"></div>
+      <div class="galaxy-bottom"><span id="galaxy-place"></span><span class="gesture-hint">Arrastra para recorrer los recuerdos</span></div>
+    </section>
+    <section id="fallback" hidden aria-label="Explorar los lugares">
+      <p>Tu navegador no pudo abrir el mundo en 3D. Puedes entrar a los recuerdos desde cada lugar.</p>
+      <div id="fallback-places"></div>
+    </section>
+    <p id="announcement" class="sr-only" aria-live="polite"></p>
+  </main>
+  <dialog id="memory-dialog" aria-labelledby="memory-title">
+    <button class="icon-button close-dialog" aria-label="Cerrar recuerdo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    <div class="memory-image-wrap"><img id="memory-image" alt="" hidden></div>
+    <div class="memory-text"><span id="memory-kind"></span><h2 id="memory-title"></h2><p id="memory-description"></p><a id="memory-source" target="_blank" rel="noopener noreferrer">Leer el testimonio</a><p id="memory-credit"></p></div>
+  </dialog>
+  <dialog id="sources-dialog" aria-labelledby="sources-title">
+    <button class="icon-button close-dialog" aria-label="Cerrar fuentes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    <div class="sources-inner"><span class="eyebrow">Un archivo de afectos</span><h2 id="sources-title">Recordar una vida.</h2><p>Esta obra reúne recuerdos publicados por familias, amistades y fuentes documentales. Los textos son síntesis de esos testimonios. No se inventan sueños, premios ni logros.</p><p id="source-note"></p><div id="source-list"></div><p class="source-footnote">Los puntos señalan localidades, no domicilios ni coordenadas exactas. Algunas fotografías se repiten con encuadres distintos para acompañar diferentes recuerdos. Sus derechos pertenecen a sus autores y familias.</p><p class="source-footnote">Obra escolar de Astrid Osorno. Inspiración visual: MRI of the Earth. Imagen terrestre: NASA, distribuida en los ejemplos de Three.js. Geograf?a: Natural Earth, distribuida en los ejemplos de globe.gl. Fragmento de apertura: Cristina Rivera Garza, <em>El invencible verano de Liliana</em> (2021).</p></div>
+  </dialog>
+  <noscript><div class="no-script">Activa JavaScript para recorrer esta obra interactiva.</div></noscript>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
